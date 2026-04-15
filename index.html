@@ -3,20 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CheckOffice - 팀 공유형</title>
+    <title>CheckOffice - 버튼형 선택</title>
     <style>
-        :root { --primary: #0366d6; --success: #2ea44f; --bg: #f6f8fa; --border: #e1e4e8; }
+        :root { --primary: #0366d6; --success: #2ea44f; --bg: #f6f8fa; --border: #e1e4e8; --selected: #e7f3ff; }
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 500px; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         h1 { font-size: 1.25rem; text-align: center; border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; }
+        
+        /* 팀원 카드 스타일 */
         .member-card { border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
         .member-info { display: flex; align-items: center; gap: 10px; }
-        .member-name { font-weight: 600; font-size: 1rem; }
+        .member-name { font-weight: 600; }
         .main-check { width: 20px; height: 20px; cursor: pointer; }
+
+        /* 확인자 버튼 그룹 스타일 */
+        .checker-group { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+        .checker-btn { 
+            padding: 12px; border: 1px solid var(--border); border-radius: 6px; 
+            background: white; cursor: pointer; font-size: 0.95rem; transition: all 0.2s; 
+            color: #444; font-weight: 500;
+        }
+        .checker-btn.active { 
+            background-color: var(--selected); border-color: var(--primary); 
+            color: var(--primary); font-weight: bold; box-shadow: inset 0 0 0 1px var(--primary);
+        }
+
         .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 1rem; }
-        button { background-color: var(--success); color: white; border: none; font-weight: 600; cursor: pointer; }
-        button:disabled { background-color: #ccc; }
+        .save-btn { width: 100%; padding: 15px; margin-top: 15px; border-radius: 6px; border: none; background-color: var(--success); color: white; font-weight: 600; font-size: 1rem; cursor: pointer; }
+        .save-btn:disabled { background-color: #ccc; }
+
         .history-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; border: 1px solid var(--border); margin-top: 30px; border-radius: 6px; overflow: hidden; }
         .history-table th, td { padding: 12px; border: 1px solid var(--border); text-align: center; }
         .history-table th { background: #f1f5f9; color: #475569; }
@@ -30,25 +45,16 @@
 
     <div class="footer">
         <label><strong>오늘의 최종 확인자</strong></label>
-        <select id="final-checker">
-            <option value="">이름을 선택하세요</option>
-            <option value="김진호">김진호</option>
-            <option value="김설하">김설하</option>
-            <option value="윤형석">윤형석</option>
-            <option value="윤다나">윤다나</option>
-        </select>
-        <button id="save-btn" onclick="submitLog()">기록 완료 및 공유</button>
+        <div class="checker-group" id="checker-btn-group">
+            </div>
+        <button id="save-btn" class="save-btn" onclick="submitLog()">기록 완료 및 공유</button>
     </div>
 </div>
 
 <div style="width: 100%; max-width: 500px;">
     <table class="history-table">
         <thead>
-            <tr>
-                <th>날짜</th>
-                <th>확인자</th>
-                <th>상태 (시간)</th>
-            </tr>
+            <tr><th>날짜</th><th>확인자</th><th>상태 (시간)</th></tr>
         </thead>
         <tbody id="history-body">
             <tr><td colspan="3">데이터 불러오는 중...</td></tr>
@@ -57,13 +63,15 @@
 </div>
 
 <script>
-    // [중요] 구글 Apps Script 배포 후 받은 URL을 여기에 넣으세요.
     const API_URL = 'https://script.google.com/macros/s/AKfycbwjwdryF4_rh1-d_3YiXaSjeT45zcc8ByXUHM2FUlWUhrqY5j2UPZYiFPkorPck0If0/exec';
-    
     const team = ["김진호", "김설하", "윤형석", "윤다나"];
+    let selectedChecker = ""; // 선택된 확인자 저장 변수
 
     function init() {
         const root = document.getElementById('checklist-root');
+        const btnGroup = document.getElementById('checker-btn-group');
+
+        // 1. 상단 체크리스트 생성
         team.forEach(name => {
             const card = document.createElement('div');
             card.className = 'member-card';
@@ -75,26 +83,34 @@
                 <span style="color: #888; font-size: 0.8rem;">확인 완료</span>
             `;
             root.appendChild(card);
+
+            // 2. 하단 확인자 버튼 생성
+            const btn = document.createElement('button');
+            btn.className = 'checker-btn';
+            btn.innerText = name;
+            btn.onclick = () => selectChecker(name, btn);
+            btnGroup.appendChild(btn);
         });
         loadLogs();
     }
 
-    // 헬퍼 함수: 날짜 포맷 (YYYY-MM-DD)
-    function getFormattedDate(date) {
-        const d = new Date(date);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+    // 확인자 단일 선택 함수
+    function selectChecker(name, element) {
+        // 기존 활성화된 버튼 해제
+        document.querySelectorAll('.checker-btn').forEach(btn => btn.classList.remove('active'));
+        // 클릭한 버튼 활성화
+        element.classList.add('active');
+        selectedChecker = name;
     }
 
-    // 헬퍼 함수: 시간 포맷 (HH:mm:ss)
+    function getFormattedDate(date) {
+        const d = new Date(date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
     function getFormattedTime(date) {
         const d = new Date(date);
-        const hours = String(d.getHours()).padStart(2, '0');
-        const minutes = String(d.getMinutes()).padStart(2, '0');
-        const seconds = String(d.getSeconds()).padStart(2, '0');
-        return `${hours}:${minutes}:${seconds}`;
+        return d.toTimeString().split(' ')[0];
     }
 
     async function loadLogs() {
@@ -108,10 +124,9 @@
     }
 
     async function submitLog() {
-        const checker = document.getElementById('final-checker').value;
+        if (!selectedChecker) return alert("확인자를 선택해주세요.");
+        
         const btn = document.getElementById('save-btn');
-        if (!checker) return alert("확인자 이름을 선택해주세요.");
-
         btn.disabled = true;
         btn.innerText = "저장 중...";
 
@@ -119,18 +134,15 @@
         const payload = {
             date: getFormattedDate(now),
             time: getFormattedTime(now),
-            checker: checker
+            checker: selectedChecker
         };
 
         try {
-            await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
             alert("기록되었습니다!");
             location.reload();
         } catch (e) {
-            alert("저장 실패. 설정을 확인하세요.");
+            alert("저장 실패");
             btn.disabled = false;
             btn.innerText = "기록 완료 및 공유";
         }
@@ -143,14 +155,13 @@
             return;
         }
         
-        // 역순으로 정렬하여 최근 7개만 표시
-        tbody.innerHTML = logs.reverse().slice(0, 7).map(log => `
-            <tr>
-                <td>${log.date}</td>
-                <td>${log.checker}</td>
-                <td><span style="color: #2ea44f; font-weight: bold;">${log.time}</span></td>
-            </tr>
-        `).join('');
+        tbody.innerHTML = logs.reverse().slice(0, 7).map(log => {
+            let d = log.date, t = log.time;
+            if (String(d).includes('T')) d = new Date(d).toISOString().split('T')[0];
+            if (String(t).includes('T')) t = new Date(t).toTimeString().split(' ')[0];
+            
+            return `<tr><td>${d}</td><td>${log.checker}</td><td><span style="color:#2ea44f; font-weight:bold;">${t}</span></td></tr>`;
+        }).join('');
     }
 
     window.onload = init;
