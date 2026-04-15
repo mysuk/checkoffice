@@ -9,22 +9,16 @@
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 500px; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         h1 { font-size: 1.25rem; text-align: center; color: #24292e; border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; }
-        
-        .member-card { border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 12px; transition: background 0.2s; }
-        .member-card:hover { background: #fcfcfc; }
-        .member-name { font-weight: 600; display: block; margin-bottom: 10px; color: #1f2328; }
+        .member-card { border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 12px; }
+        .member-name { font-weight: 600; display: block; margin-bottom: 10px; }
         .check-group { display: flex; justify-content: space-between; }
-        .check-item { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
-
         .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
         select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 1rem; }
         button { background-color: var(--success); color: white; border: none; font-weight: 600; cursor: pointer; }
-        button:disabled { background-color: #94d3a2; cursor: not-allowed; }
-
         .history-section { width: 100%; max-width: 500px; margin-top: 30px; }
-        .history-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .history-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; border: 1px solid var(--border); }
         .history-table th, td { padding: 12px; border: 1px solid var(--border); text-align: center; }
-        .history-table th { background: #f1f5f9; color: #475569; }
+        .history-table th { background: #f1f5f9; }
         .status-badge { background: #dafbe1; color: #1a7f37; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
     </style>
 </head>
@@ -33,9 +27,8 @@
 <div class="container">
     <h1>🏢 CheckOffice</h1>
     <div id="checklist-root"></div>
-
     <div class="footer">
-        <label for="final-checker"><strong>오늘의 최종 확인자</strong></label>
+        <label><strong>오늘의 최종 확인자</strong></label>
         <select id="final-checker">
             <option value="">이름을 선택하세요</option>
             <option value="김진호">김진호</option>
@@ -51,11 +44,7 @@
     <h3>📅 최근 7일 팀 기록</h3>
     <table class="history-table">
         <thead>
-            <tr>
-                <th>날짜</th>
-                <th>확인자</th>
-                <th>상태</th>
-            </tr>
+            <tr><th>날짜</th><th>확인자</th><th>상태</th></tr>
         </thead>
         <tbody id="history-body">
             <tr><td colspan="3">데이터 동기화 중...</td></tr>
@@ -64,322 +53,124 @@
 </div>
 
 <script>
-    // === [설정 영역] 본인의 정보로 수정하세요 ===
+    // === [필수 수정 영역] ===
     const CONFIG = {
-        OWNER: 'mysuk',
-        REPO: 'checkoffice',
-        FILE: 'data.json',
-        TOKEN: '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' // ghp_... 로 시작하는 토큰
+        OWNER: 'mysuk', // 깃허브 아이디
+        REPO: 'checkoffice',      // 저장소 이름
+        FILE: 'data.json',       // 데이터 파일명
+        TOKEN: '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'      // 발급받은 ghp_... 토큰
     };
 
     const team = ["김진호", "김설하", "윤형석", "윤다나"];
     const items = ["서랍", "전원", "서류"];
 
-    // 1. 초기 리스트 렌더링
+    // 한글 깨짐 방지 Base64 디코딩 함수
+    function decodeBase64(str) {
+        return decodeURIComponent(atob(str).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+    }
+
+    // 한글 깨짐 방지 Base64 인코딩 함수
+    function encodeBase64(str) {
+        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+            return String.fromCharCode('0x' + p1);
+        }));
+    }
+
     function init() {
         const root = document.getElementById('checklist-root');
         team.forEach(name => {
             const card = document.createElement('div');
             card.className = 'member-card';
-            card.innerHTML = `
-                <span class="member-name">${name}</span>
-                <div class="check-group">
-                    ${items.map(item => `<label class="check-item"><input type="checkbox" class="chk-box"> ${item}</label>`).join('')}
-                </div>`;
+            card.innerHTML = `<span class="member-name">${name}</span><div class="check-group">` +
+                items.map(item => `<label><input type="checkbox"> ${item}</label>`).join('') + `</div>`;
             root.appendChild(card);
         });
         loadLogs();
     }
 
-    // 2. GitHub에서 데이터 불러오기
     async function loadLogs() {
         const url = `https://api.github.com/repos/${CONFIG.OWNER}/${CONFIG.REPO}/contents/${CONFIG.FILE}`;
         try {
             const res = await fetch(url, {
                 headers: { 'Authorization': `token ${CONFIG.TOKEN}`, 'Cache-Control': 'no-cache' }
             });
+            if (!res.ok) throw new Error("파일 없음");
             const data = await res.json();
-            // Base64 디코딩 (한글 깨짐 방지 처리)
-            const content = JSON.parse(decodeURIComponent(escape(atob(data.content))));
+            const content = JSON.parse(decodeBase64(data.content));
             renderTable(content);
-            return data.sha; // 수정 시 필요한 파일 식별값
         } catch (e) {
-            document.getElementById('history-body').innerHTML = '<tr><td colspan="3">데이터를 불러올 수 없습니다.</td></tr>';
+            document.getElementById('history-body').innerHTML = '<tr><td colspan="3">최근 기록이 없습니다. (첫 기록을 작성해주세요)</td></tr>';
         }
     }
 
-    // 3. 기록 저장 및 업로드
     async function submitLog() {
         const checker = document.getElementById('final-checker').value;
         const btn = document.getElementById('save-btn');
-        if (!checker) return alert("확인자 이름을 선택해주세요.");
+        if (!checker) return alert("확인자를 선택하세요.");
 
         btn.disabled = true;
         btn.innerText = "저장 중...";
 
         try {
-            // 최신 SHA값과 기존 데이터를 가져옴
             const url = `https://api.github.com/repos/${CONFIG.OWNER}/${CONFIG.REPO}/contents/${CONFIG.FILE}`;
             const res = await fetch(url, { headers: { 'Authorization': `token ${CONFIG.TOKEN}` } });
-            const fileData = await res.json();
-            let history = JSON.parse(decodeURIComponent(escape(atob(fileData.content))));
+            let history = [];
+            let sha = "";
 
-            // 새 기록 생성
+            if (res.ok) {
+                const data = await res.json();
+                sha = data.sha;
+                history = JSON.parse(decodeBase64(data.content));
+            }
+
             const now = new Date();
-            const newEntry = {
+            history.push({
                 date: `${now.getMonth() + 1}/${now.getDate()}`,
                 time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 checker: checker,
                 timestamp: now.toISOString()
-            };
+            });
 
-            history.push(newEntry);
-
-            // 최근 7일치만 남기고 필터링
+            // 7일치 필터링
             const oneWeekAgo = new Date();
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
             const filtered = history.filter(h => new Date(h.timestamp) >= oneWeekAgo);
 
-            // GitHub에 업로드 (Base64 인코딩)
-            const updatedContent = btoa(unescape(encodeURIComponent(JSON.stringify(filtered, null, 2))));
-
             const putRes = await fetch(url, {
                 method: 'PUT',
-                headers: { 
-                    'Authorization': `token ${CONFIG.TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Authorization': `token ${CONFIG.TOKEN}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: `Check by ${checker}`,
-                    content: updatedContent,
-                    sha: fileData.sha
+                    content: encodeBase64(JSON.stringify(filtered, null, 2)),
+                    sha: sha
                 })
             });
 
             if (putRes.ok) {
-                alert("성공적으로 공유되었습니다!");
+                alert("공유 완료!");
                 location.reload();
-            } else {
-                throw new Error("전송 실패");
             }
         } catch (e) {
-            alert("오류가 발생했습니다: " + e.message);
+            alert("오류 발생: " + e.message);
         } finally {
             btn.disabled = false;
-            btn.innerText = "기록 및 팀 공유 저장";
         }
     }
 
-    // 4. 테이블 출력
     function renderTable(logs) {
         const tbody = document.getElementById('history-body');
         if (!logs || logs.length === 0) {
             tbody.innerHTML = '<tr><td colspan="3">최근 기록이 없습니다.</td></tr>';
             return;
         }
-        tbody.innerHTML = logs.reverse().map(log => `
-            <tr>
-                <td>${log.date}</td>
-                <td>${log.checker}</td>
-                <td><span class="status-badge">완료 ${log.time}</span></td>
-            </tr>
+        tbody.innerHTML = logs.reverse().slice(0, 10).map(log => `
+            <tr><td>${log.date}</td><td>${log.checker}</td><td><span class="status-badge">완료 ${log.time}</span></td></tr>
         `).join('');
     }
 
     window.onload = init;
 </script>
-
-</body>
-</html><!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CheckOffice - 팀 통합 체크리스트</title>
-    <style>
-        :root { --primary: #0366d6; --success: #2ea44f; --bg: #f6f8fa; --border: #e1e4e8; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 500px; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        h1 { font-size: 1.25rem; text-align: center; color: #24292e; border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; }
-        
-        .member-card { border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 12px; transition: background 0.2s; }
-        .member-card:hover { background: #fcfcfc; }
-        .member-name { font-weight: 600; display: block; margin-bottom: 10px; color: #1f2328; }
-        .check-group { display: flex; justify-content: space-between; }
-        .check-item { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
-
-        .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 1rem; }
-        button { background-color: var(--success); color: white; border: none; font-weight: 600; cursor: pointer; }
-        button:disabled { background-color: #94d3a2; cursor: not-allowed; }
-
-        .history-section { width: 100%; max-width: 500px; margin-top: 30px; }
-        .history-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-        .history-table th, td { padding: 12px; border: 1px solid var(--border); text-align: center; }
-        .history-table th { background: #f1f5f9; color: #475569; }
-        .status-badge { background: #dafbe1; color: #1a7f37; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h1>🏢 CheckOffice</h1>
-    <div id="checklist-root"></div>
-
-    <div class="footer">
-        <label for="final-checker"><strong>오늘의 최종 확인자</strong></label>
-        <select id="final-checker">
-            <option value="">이름을 선택하세요</option>
-            <option value="김진호">김진호</option>
-            <option value="김설하">김설하</option>
-            <option value="윤형석">윤형석</option>
-            <option value="윤다나">윤다나</option>
-        </select>
-        <button id="save-btn" onclick="submitLog()">기록 및 팀 공유 저장</button>
-    </div>
-</div>
-
-<div class="history-section">
-    <h3>📅 최근 7일 팀 기록</h3>
-    <table class="history-table">
-        <thead>
-            <tr>
-                <th>날짜</th>
-                <th>확인자</th>
-                <th>상태</th>
-            </tr>
-        </thead>
-        <tbody id="history-body">
-            <tr><td colspan="3">데이터 동기화 중...</td></tr>
-        </tbody>
-    </table>
-</div>
-
-<script>
-    // === [설정 영역] 본인의 정보로 수정하세요 ===
-    const CONFIG = {
-        OWNER: 'YOUR_GITHUB_ID',
-        REPO: 'checkoffice',
-        FILE: 'data.json',
-        TOKEN: 'YOUR_PERSONAL_TOKEN' // ghp_... 로 시작하는 토큰
-    };
-
-    const team = ["김진호", "김설하", "윤형석", "윤다나"];
-    const items = ["서랍", "전원", "서류"];
-
-    // 1. 초기 리스트 렌더링
-    function init() {
-        const root = document.getElementById('checklist-root');
-        team.forEach(name => {
-            const card = document.createElement('div');
-            card.className = 'member-card';
-            card.innerHTML = `
-                <span class="member-name">${name}</span>
-                <div class="check-group">
-                    ${items.map(item => `<label class="check-item"><input type="checkbox" class="chk-box"> ${item}</label>`).join('')}
-                </div>`;
-            root.appendChild(card);
-        });
-        loadLogs();
-    }
-
-    // 2. GitHub에서 데이터 불러오기
-    async function loadLogs() {
-        const url = `https://api.github.com/repos/${CONFIG.OWNER}/${CONFIG.REPO}/contents/${CONFIG.FILE}`;
-        try {
-            const res = await fetch(url, {
-                headers: { 'Authorization': `token ${CONFIG.TOKEN}`, 'Cache-Control': 'no-cache' }
-            });
-            const data = await res.json();
-            // Base64 디코딩 (한글 깨짐 방지 처리)
-            const content = JSON.parse(decodeURIComponent(escape(atob(data.content))));
-            renderTable(content);
-            return data.sha; // 수정 시 필요한 파일 식별값
-        } catch (e) {
-            document.getElementById('history-body').innerHTML = '<tr><td colspan="3">데이터를 불러올 수 없습니다.</td></tr>';
-        }
-    }
-
-    // 3. 기록 저장 및 업로드
-    async function submitLog() {
-        const checker = document.getElementById('final-checker').value;
-        const btn = document.getElementById('save-btn');
-        if (!checker) return alert("확인자 이름을 선택해주세요.");
-
-        btn.disabled = true;
-        btn.innerText = "저장 중...";
-
-        try {
-            // 최신 SHA값과 기존 데이터를 가져옴
-            const url = `https://api.github.com/repos/${CONFIG.OWNER}/${CONFIG.REPO}/contents/${CONFIG.FILE}`;
-            const res = await fetch(url, { headers: { 'Authorization': `token ${CONFIG.TOKEN}` } });
-            const fileData = await res.json();
-            let history = JSON.parse(decodeURIComponent(escape(atob(fileData.content))));
-
-            // 새 기록 생성
-            const now = new Date();
-            const newEntry = {
-                date: `${now.getMonth() + 1}/${now.getDate()}`,
-                time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                checker: checker,
-                timestamp: now.toISOString()
-            };
-
-            history.push(newEntry);
-
-            // 최근 7일치만 남기고 필터링
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            const filtered = history.filter(h => new Date(h.timestamp) >= oneWeekAgo);
-
-            // GitHub에 업로드 (Base64 인코딩)
-            const updatedContent = btoa(unescape(encodeURIComponent(JSON.stringify(filtered, null, 2))));
-
-            const putRes = await fetch(url, {
-                method: 'PUT',
-                headers: { 
-                    'Authorization': `token ${CONFIG.TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: `Check by ${checker}`,
-                    content: updatedContent,
-                    sha: fileData.sha
-                })
-            });
-
-            if (putRes.ok) {
-                alert("성공적으로 공유되었습니다!");
-                location.reload();
-            } else {
-                throw new Error("전송 실패");
-            }
-        } catch (e) {
-            alert("오류가 발생했습니다: " + e.message);
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "기록 및 팀 공유 저장";
-        }
-    }
-
-    // 4. 테이블 출력
-    function renderTable(logs) {
-        const tbody = document.getElementById('history-body');
-        if (!logs || logs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3">최근 기록이 없습니다.</td></tr>';
-            return;
-        }
-        tbody.innerHTML = logs.reverse().map(log => `
-            <tr>
-                <td>${log.date}</td>
-                <td>${log.checker}</td>
-                <td><span class="status-badge">완료 ${log.time}</span></td>
-            </tr>
-        `).join('');
-    }
-
-    window.onload = init;
-</script>
-
 </body>
 </html>
