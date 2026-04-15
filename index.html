@@ -105,6 +105,8 @@
         }
     }
 
+    // ... (앞부분 스타일 및 HTML 동일) ...
+
     async function submitLog() {
         const checker = document.getElementById('final-checker').value;
         const btn = document.getElementById('save-btn');
@@ -115,20 +117,32 @@
 
         try {
             const url = `https://api.github.com/repos/${CONFIG.OWNER}/${CONFIG.REPO}/contents/${CONFIG.FILE}`;
-            const res = await fetch(url, { headers: { 'Authorization': `token ${CONFIG.TOKEN}` } });
+            
+            // 1. 기존 파일 정보 가져오기 시도
+            const res = await fetch(url, { 
+                headers: { 'Authorization': `token ${CONFIG.TOKEN}` } 
+            });
+
             let history = [];
             let sha = "";
 
-            if (res.ok) {
+            if (res.status === 200) {
                 const data = await res.json();
                 sha = data.sha;
                 history = JSON.parse(decodeBase64(data.content));
+            } else if (res.status === 404) {
+                // 파일이 없는 경우 빈 배열로 시작 (처음 저장할 때)
+                history = [];
+            } else {
+                const errorData = await res.json();
+                throw new Error(`불러오기 실패(${res.status}): ${errorData.message}`);
             }
 
+            // 2. 새로운 데이터 추가
             const now = new Date();
             history.push({
                 date: `${now.getMonth() + 1}/${now.getDate()}`,
-                time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
                 checker: checker,
                 timestamp: now.toISOString()
             });
@@ -138,24 +152,32 @@
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
             const filtered = history.filter(h => new Date(h.timestamp) >= oneWeekAgo);
 
+            // 3. GitHub에 데이터 전송 (PUT)
             const putRes = await fetch(url, {
                 method: 'PUT',
-                headers: { 'Authorization': `token ${CONFIG.TOKEN}`, 'Content-Type': 'application/json' },
+                headers: { 
+                    'Authorization': `token ${CONFIG.TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({
-                    message: `Check by ${checker}`,
+                    message: `Check-in: ${checker}`,
                     content: encodeBase64(JSON.stringify(filtered, null, 2)),
-                    sha: sha
+                    sha: sha || undefined // 파일이 처음 생성될 때는 sha가 없어야 함
                 })
             });
 
             if (putRes.ok) {
-                alert("공유 완료!");
+                alert("성공적으로 저장되었습니다!");
                 location.reload();
+            } else {
+                const errorData = await putRes.json();
+                throw new Error(`전송 실패(${putRes.status}): ${errorData.message}`);
             }
         } catch (e) {
-            alert("오류 발생: " + e.message);
-        } finally {
+            console.error(e);
+            alert("⚠️ 오류 발생!\n" + e.message);
             btn.disabled = false;
+            btn.innerText = "기록 및 팀 공유 저장";
         }
     }
 
