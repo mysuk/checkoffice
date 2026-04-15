@@ -3,23 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CheckOffice - 보안 간편 체크</title>
+    <title>CheckOffice - 팀 공유형</title>
     <style>
         :root { --primary: #0366d6; --success: #2ea44f; --bg: #f6f8fa; --border: #e1e4e8; }
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 500px; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         h1 { font-size: 1.25rem; text-align: center; border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; }
-        
         .member-card { border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
         .member-info { display: flex; align-items: center; gap: 10px; }
         .member-name { font-weight: 600; font-size: 1rem; }
         .main-check { width: 20px; height: 20px; cursor: pointer; }
-        
         .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
         select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 1rem; }
         button { background-color: var(--success); color: white; border: none; font-weight: 600; cursor: pointer; }
         button:disabled { background-color: #ccc; }
-
         .history-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; border: 1px solid var(--border); margin-top: 30px; border-radius: 6px; overflow: hidden; }
         .history-table th, td { padding: 12px; border: 1px solid var(--border); text-align: center; }
         .history-table th { background: #f1f5f9; color: #475569; }
@@ -29,8 +26,7 @@
 
 <div class="container">
     <h1>🏢 CheckOffice</h1>
-    <div id="checklist-root">
-        </div>
+    <div id="checklist-root"></div>
 
     <div class="footer">
         <label><strong>오늘의 최종 확인자</strong></label>
@@ -51,7 +47,7 @@
             <tr>
                 <th>날짜</th>
                 <th>확인자</th>
-                <th>상태</th>
+                <th>상태 (시간)</th>
             </tr>
         </thead>
         <tbody id="history-body">
@@ -66,7 +62,6 @@
     
     const team = ["김진호", "김설하", "윤형석", "윤다나"];
 
-    // 1. 리스트 생성 (이름 옆에 체크박스 하나만 배치)
     function init() {
         const root = document.getElementById('checklist-root');
         team.forEach(name => {
@@ -77,14 +72,31 @@
                     <input type="checkbox" class="main-check">
                     <span class="member-name">${name}</span>
                 </div>
-                <span style="color: #888; font-size: 0.8rem;">서랍·전원·서류</span>
+                <span style="color: #888; font-size: 0.8rem;">확인 완료</span>
             `;
             root.appendChild(card);
         });
         loadLogs();
     }
 
-    // 2. 구글 시트에서 기록 가져오기
+    // 헬퍼 함수: 날짜 포맷 (YYYY-MM-DD)
+    function getFormattedDate(date) {
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    // 헬퍼 함수: 시간 포맷 (HH:mm:ss)
+    function getFormattedTime(date) {
+        const d = new Date(date);
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const seconds = String(d.getSeconds()).padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    }
+
     async function loadLogs() {
         try {
             const res = await fetch(API_URL);
@@ -95,7 +107,6 @@
         }
     }
 
-    // 3. 기록 저장하기
     async function submitLog() {
         const checker = document.getElementById('final-checker').value;
         const btn = document.getElementById('save-btn');
@@ -106,13 +117,12 @@
 
         const now = new Date();
         const payload = {
-            date: `${now.getMonth() + 1}/${now.getDate()}`,
-            time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+            date: getFormattedDate(now),
+            time: getFormattedTime(now),
             checker: checker
         };
 
         try {
-            // Google Apps Script로 데이터 전송
             await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify(payload)
@@ -126,19 +136,19 @@
         }
     }
 
-    // 4. 테이블 출력
     function renderTable(logs) {
         const tbody = document.getElementById('history-body');
         if (!logs || logs.length === 0) {
             tbody.innerHTML = '<tr><td colspan="3">최근 기록이 없습니다.</td></tr>';
             return;
         }
-        // 최신순으로 7개만 표시
+        
+        // 역순으로 정렬하여 최근 7개만 표시
         tbody.innerHTML = logs.reverse().slice(0, 7).map(log => `
             <tr>
                 <td>${log.date}</td>
                 <td>${log.checker}</td>
-                <td><span style="color: #2ea44f; font-weight: bold;">완료 ${log.time}</span></td>
+                <td><span style="color: #2ea44f; font-weight: bold;">${log.time}</span></td>
             </tr>
         `).join('');
     }
