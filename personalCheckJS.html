@@ -1,1 +1,176 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>통계정산팀 개인 보안점검부</title>
+    <style>
+        :root { --primary: #0366d6; --success: #2ea44f; --bg: #f6f8fa; --border: #e1e4e8; --selected: #e7f3ff; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 500px; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        h1 { font-size: 1.2rem; text-align: center; color: #24292e; margin-bottom: 25px; }
+        
+        .label { display: block; margin-bottom: 10px; font-weight: bold; color: #586069; }
+        
+        /* 이름 선택 버튼 그룹 */
+        .name-group { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+        .name-btn { 
+            padding: 15px; border: 1px solid var(--border); border-radius: 6px; 
+            background: white; cursor: pointer; font-size: 1rem; transition: all 0.2s; 
+            color: #24292e; font-weight: 500;
+        }
+        .name-btn.active { 
+            background-color: var(--selected); border-color: var(--primary); 
+            color: var(--primary); font-weight: bold; box-shadow: inset 0 0 0 1px var(--primary);
+        }
 
+        .save-btn { 
+            width: 100%; padding: 16px; border-radius: 6px; border: none; 
+            background-color: var(--success); color: white; font-weight: 600; font-size: 1.1rem; cursor: pointer; 
+        }
+        .save-btn:disabled { background-color: #94d3a2; cursor: not-allowed; }
+
+        .history-section { width: 100%; max-width: 500px; margin-top: 30px; }
+        .history-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.9rem; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+        .history-table th, td { padding: 12px; border: 1px solid var(--border); text-align: center; }
+        .history-table th { background: #f1f5f9; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔒 통계정산팀 일일 보안점검부</h1>
+    
+    <span class="label">점검자 선택</span>
+    <div class="name-group" id="name-group">
+        </div>
+
+    <button id="save-btn" class="save-btn" onclick="submitCheck()" disabled>점검 결과 저장</button>
+</div>
+
+<div class="history-section">
+    <table class="history-table">
+        <thead>
+            <tr><th>날짜</th><th>점검자</th><th>시간</th></tr>
+        </thead>
+        <tbody id="history-body">
+            <tr><td colspan="3">불러오는 중...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwjwdryF4_rh1-d_3YiXaSjeT45zcc8ByXUHM2FUlWUhrqY5j2UPZYiFPkorPck0If0/exec';
+    const members = ["박정미", "신민경", "김성태", "한윤도", "이준희"];
+    let selectedName = "";
+
+    function init() {
+        const group = document.getElementById('name-group');
+        members.forEach(name => {
+            const btn = document.createElement('button');
+            btn.className = 'name-btn';
+            btn.innerText = name;
+            btn.onclick = () => {
+                document.querySelectorAll('.name-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedName = name;
+                document.getElementById('save-btn').disabled = false;
+            };
+            group.appendChild(btn);
+        });
+        loadHistory();
+    }
+
+    async function submitCheck() {
+        const btn = document.getElementById('save-btn');
+        btn.disabled = true;
+        btn.innerText = "저장 중...";
+
+        const now = new Date();
+        const payload = {
+            date: now.toISOString().split('T')[0],
+            time: now.toTimeString().split(' ')[0],
+            // 핵심: 이름 뒤에 'S'를 붙여서 전송
+            checker: selectedName + "S" 
+        };
+
+        try {
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            alert(`${selectedName}님, 보안 점검이 완료되었습니다.`);
+            location.reload();
+        } catch (e) {
+            alert("저장 실패");
+            btn.disabled = false;
+            btn.innerText = "점검 결과 저장";
+        }
+    }
+
+async function loadHistory() {
+    try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        const tbody = document.getElementById('history-body');
+        
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3">기록이 없습니다.</td></tr>';
+            return;
+        }
+
+        // 1. 한국 시간(KST) 기준 '오늘' 날짜 문자열 생성 (YYYY-MM-DD)
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`; 
+
+        console.log("기준 오늘 날짜:", todayStr); // 디버깅용
+
+        // 2. 데이터 필터링
+        const todayLogs = data.filter(log => {
+            let logDate = log.date;
+            
+            // 시트에서 넘어온 데이터가 Date 객체나 ISO 문자열일 경우 가공
+            const d = new Date(logDate);
+            const lYear = d.getFullYear();
+            const lMonth = String(d.getMonth() + 1).padStart(2, '0');
+            const lDay = String(d.getDate()).padStart(2, '0');
+            const formattedLogDate = `${lYear}-${lMonth}-${lDay}`;
+
+            // 시차 때문에 날짜가 하루 전으로 보일 경우를 대비해 문자열 포함 여부도 체크
+            return formattedLogDate === todayStr || String(logDate).includes(todayStr);
+        });
+
+        if (todayLogs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3">오늘(${todayStr}) 점검 내역이 없습니다.</td></tr>`;
+            return;
+        }
+
+        // 3. 화면 출력
+        tbody.innerHTML = todayLogs.reverse().map(log => {
+            let d = log.date;
+            let t = log.time;
+            
+            // 출력 시에도 깔끔하게 날짜만 표시
+            if (String(d).includes('T')) d = d.split('T')[0];
+            // 시간 표시 (HH:mm:ss)
+            if (String(t).includes('T')) t = new Date(t).toTimeString().split(' ')[0];
+            
+            return `
+                <tr>
+                    <td>${d}</td>
+                    <td>${log.checker}</td>
+                    <td><span style="color:#2ea44f; font-weight:bold;">${t}</span></td>
+                </tr>
+            `;
+        }).join('');
+        
+    } catch (e) {
+        console.error("데이터 로드 중 오류:", e);
+        document.getElementById('history-body').innerHTML = '<tr><td colspan="3">데이터 로드 오류</td></tr>';
+    }
+}
+
+    window.onload = init;
+</script>
+</body>
+</html>
