@@ -10,13 +10,20 @@
         .container { width: 100%; max-width: 500px; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         h1 { font-size: 1.25rem; text-align: center; border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; }
         
-        /* 팀원 카드 스타일 */
-        .member-card { border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
-        .member-info { display: flex; align-items: center; gap: 10px; }
-        .member-name { font-weight: 600; }
-        .main-check { width: 20px; height: 20px; cursor: pointer; }
+        /* 팀원 카드 스타일 - 클릭 가능하도록 개선 */
+        .member-card { 
+            border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 12px; 
+            display: flex; align-items: center; justify-content: space-between; 
+            cursor: pointer; transition: background 0.2s;
+        }
+        .member-card:hover { background-color: #fcfcfc; }
+        .member-card.checked { background-color: #f0f7ff; border-color: #0366d6; }
+        
+        .member-info { display: flex; align-items: center; gap: 12px; pointer-events: none; } /* 내부 요소 클릭 간섭 방지 */
+        .member-name { font-weight: 600; font-size: 1rem; }
+        .main-check { width: 22px; height: 22px; cursor: pointer; }
 
-        /* 확인자 버튼 그룹 스타일 */
+        /* 확인자 버튼 그룹 */
         .checker-group { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
         .checker-btn { 
             padding: 12px; border: 1px solid var(--border); border-radius: 6px; 
@@ -29,8 +36,11 @@
         }
 
         .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
-        .save-btn { width: 100%; padding: 15px; margin-top: 15px; border-radius: 6px; border: none; background-color: var(--success); color: white; font-weight: 600; font-size: 1rem; cursor: pointer; }
-        .save-btn:disabled { background-color: #ccc; }
+        .save-btn { 
+            width: 100%; padding: 15px; margin-top: 15px; border-radius: 6px; border: none; 
+            background-color: var(--success); color: white; font-weight: 600; font-size: 1rem; cursor: pointer; 
+        }
+        .save-btn:disabled { background-color: #ccc; cursor: not-allowed; opacity: 0.7; }
 
         .history-table { width: 100%; border-collapse: collapse; background: white; font-size: 0.85rem; border: 1px solid var(--border); margin-top: 30px; border-radius: 6px; overflow: hidden; }
         .history-table th, td { padding: 12px; border: 1px solid var(--border); text-align: center; }
@@ -40,14 +50,13 @@
 <body>
 
 <div class="container">
-    <h1>🏢 수익관리팀 보안 점검</h1>
+    <h1>🏢 수익관린팀 보안 점검</h1>
     <div id="checklist-root"></div>
 
     <div class="footer">
         <label><strong>오늘의 최종 확인자</strong></label>
-        <div class="checker-group" id="checker-btn-group">
-            </div>
-        <button id="save-btn" class="save-btn" onclick="submitLog()">기록 완료 및 공유</button>
+        <div class="checker-group" id="checker-btn-group"></div>
+        <button id="save-btn" class="save-btn" onclick="submitLog()" disabled>전체 체크 후 저장 가능</button>
     </div>
 </div>
 
@@ -65,22 +74,23 @@
 <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbwjwdryF4_rh1-d_3YiXaSjeT45zcc8ByXUHM2FUlWUhrqY5j2UPZYiFPkorPck0If0/exec';
     const team = ["김진호", "김설하", "윤형석", "윤다나"];
-    let selectedChecker = ""; // 선택된 확인자 저장 변수
+    let selectedChecker = "";
 
     function init() {
         const root = document.getElementById('checklist-root');
         const btnGroup = document.getElementById('checker-btn-group');
 
-        // 1. 상단 체크리스트 생성
         team.forEach(name => {
+            // 1. 팀원 카드 생성
             const card = document.createElement('div');
             card.className = 'member-card';
+            card.onclick = (e) => toggleCard(card); // 카드 클릭 시 토글
             card.innerHTML = `
                 <div class="member-info">
                     <input type="checkbox" class="main-check">
                     <span class="member-name">${name}</span>
                 </div>
-                <span style="color: #888; font-size: 0.8rem;">전원 서랍 서류</span>
+                <span style="color: #888; font-size: 0.8rem;">확인 완료</span>
             `;
             root.appendChild(card);
 
@@ -94,13 +104,35 @@
         loadLogs();
     }
 
-    // 확인자 단일 선택 함수
+    // 카드(네모박스) 클릭 시 체크박스 상태 변경
+    function toggleCard(card) {
+        const checkbox = card.querySelector('.main-check');
+        checkbox.checked = !checkbox.checked;
+        card.classList.toggle('checked', checkbox.checked);
+        validateForm(); // 체크 상태 바뀔 때마다 버튼 검사
+    }
+
+    // 확인자 선택 버튼
     function selectChecker(name, element) {
-        // 기존 활성화된 버튼 해제
         document.querySelectorAll('.checker-btn').forEach(btn => btn.classList.remove('active'));
-        // 클릭한 버튼 활성화
         element.classList.add('active');
         selectedChecker = name;
+        validateForm(); // 확인자 바뀔 때마다 버튼 검사
+    }
+
+    // 저장 가능 여부 검사 (4개 모두 체크 + 확인자 선택)
+    function validateForm() {
+        const checkboxes = document.querySelectorAll('.main-check');
+        const allChecked = Array.from(checkboxes).every(chk => chk.checked);
+        const btn = document.getElementById('save-btn');
+        
+        if (allChecked && selectedChecker) {
+            btn.disabled = false;
+            btn.innerText = "기록 완료 및 공유";
+        } else {
+            btn.disabled = true;
+            btn.innerText = !allChecked ? "모두 체크해 주세요" : "확인자를 선택해 주세요";
+        }
     }
 
     function getFormattedDate(date) {
@@ -124,8 +156,6 @@
     }
 
     async function submitLog() {
-        if (!selectedChecker) return alert("확인자를 선택해주세요.");
-        
         const btn = document.getElementById('save-btn');
         btn.disabled = true;
         btn.innerText = "저장 중...";
@@ -139,12 +169,12 @@
 
         try {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-            alert("기록되었습니다!");
+            alert("성공적으로 기록되었습니다!");
             location.reload();
         } catch (e) {
             alert("저장 실패");
             btn.disabled = false;
-            btn.innerText = "기록 완료 및 공유";
+            validateForm();
         }
     }
 
@@ -159,7 +189,6 @@
             let d = log.date, t = log.time;
             if (String(d).includes('T')) d = new Date(d).toISOString().split('T')[0];
             if (String(t).includes('T')) t = new Date(t).toTimeString().split(' ')[0];
-            
             return `<tr><td>${d}</td><td>${log.checker}</td><td><span style="color:#2ea44f; font-weight:bold;">${t}</span></td></tr>`;
         }).join('');
     }
