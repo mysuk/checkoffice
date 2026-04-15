@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CheckOffice - 퇴청 체크리스트</title>
+    <style>
+        :root { --primary: #0366d6; --bg: #f6f8fa; --border: #e1e4e8; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 500px; background: white; border: 1px solid var(--border); border-radius: 6px; padding: 24px; box-shadow: 0 1px 3px rgba(27,31,35,0.12); }
+        h1 { font-size: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        .member-card { margin-bottom: 20px; padding: 15px; border: 1px solid var(--border); border-radius: 6px; }
+        .member-name { font-weight: 600; margin-bottom: 10px; display: block; }
+        .check-group { display: flex; justify-content: space-between; }
+        .check-item { display: flex; align-items: center; gap: 5px; font-size: 14px; cursor: pointer; }
+        .footer { margin-top: 30px; background: #fffdef; border: 1px solid #fff5b1; padding: 15px; border-radius: 6px; }
+        select, button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 14px; }
+        button { background-color: #2ea44f; color: white; border: none; font-weight: 600; cursor: pointer; }
+        button:hover { background-color: #2c974b; }
+        .history { margin-top: 15px; font-size: 12px; color: #586069; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🏢 CheckOffice</h1>
+    <div id="list-container"></div>
+
+    <div class="footer">
+        <strong>마지막 퇴청자 확인</strong>
+        <select id="final-checker">
+            <option value="">이름을 선택하세요</option>
+            <option value="김진호">김진호</option>
+            <option value="김설하">김설하</option>
+            <option value="윤형석">윤형석</option>
+            <option value="윤다나">윤다나</option>
+        </select>
+        <button onclick="saveAndLog()">기록 완료 및 저장</button>
+        <div id="log-display" class="history"></div>
+    </div>
+</div>
+
+<script>
+    const team = ["김진호", "김설하", "윤형석", "윤다나"];
+    const checks = ["서랍", "전원", "서류"];
+
+    // 현재 연도와 주차를 조합해 키 생성 (매주 초기화 로직)
+    const getWeekKey = () => {
+        const now = new Date();
+        const oneJan = new Date(now.getFullYear(), 0, 1);
+        const numberOfDays = Math.floor((now - oneJan) / (24 * 60 * 60 * 1000));
+        const weekNum = Math.ceil((now.getDay() + 1 + numberOfDays) / 7);
+        return `${now.getFullYear()}-W${weekNum}`;
+    };
+
+    function init() {
+        const currentWeek = getWeekKey();
+        if (localStorage.getItem('last_week') !== currentWeek) {
+            localStorage.clear(); // 주차가 바뀌면 데이터 초기화
+            localStorage.setItem('last_week', currentWeek);
+        }
+
+        const container = document.getElementById('list-container');
+        team.forEach(name => {
+            const card = document.createElement('div');
+            card.className = 'member-card';
+            let checkHtml = `<span class="member-name">${name}</span><div class="check-group">`;
+            checks.forEach(item => {
+                checkHtml += `<label class="check-item"><input type="checkbox" data-user="${name}" data-item="${item}"> ${item}</label>`;
+            });
+            checkHtml += `</div>`;
+            card.innerHTML = checkHtml;
+            container.appendChild(card);
+        });
+
+        loadHistory();
+    }
+
+    function saveAndLog() {
+        const checker = document.getElementById('final-checker').value;
+        if (!checker) return alert("체크하는 분의 이름을 선택해주세요.");
+
+        const now = new Date();
+        const timestamp = `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${now.getMinutes()}`;
+        const logEntry = `최근 기록: ${checker} (${timestamp})`;
+        
+        localStorage.setItem('last_check_log', logEntry);
+        document.getElementById('log-display').innerText = logEntry;
+        
+        // 체크박스 상태도 로컬에 저장 (새로고침 대비)
+        const states = Array.from(document.querySelectorAll('input[type="checkbox"]')).map(cb => cb.checked);
+        localStorage.setItem('checkbox_states', JSON.stringify(states));
+        
+        alert("오늘의 체크가 기록되었습니다!");
+    }
+
+    function loadHistory() {
+        const savedLog = localStorage.getItem('last_check_log');
+        if (savedLog) document.getElementById('log-display').innerText = savedLog;
+        
+        const savedStates = JSON.parse(localStorage.getItem('checkbox_states'));
+        if (savedStates) {
+            const inputs = document.querySelectorAll('input[type="checkbox"]');
+            inputs.forEach((input, i) => input.checked = savedStates[i]);
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>
