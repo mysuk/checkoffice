@@ -116,26 +116,32 @@ async function loadHistory() {
             return;
         }
 
-        // 1. 한국 시간 기준으로 오늘 날짜 구하기 (YYYY-MM-DD)
+        // 1. 한국 시간(KST) 기준 '오늘' 날짜 문자열 생성 (YYYY-MM-DD)
         const now = new Date();
-        const kstDate = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // KST 보정
-        const todayStr = kstDate.toISOString().split('T')[0];
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`; 
+
+        console.log("기준 오늘 날짜:", todayStr); // 디버깅용
 
         // 2. 데이터 필터링
         const todayLogs = data.filter(log => {
-            let logDate = String(log.date);
+            let logDate = log.date;
             
-            // ISO 형식(T 포함)일 경우 날짜만 추출
-            if (logDate.includes('T')) {
-                logDate = logDate.split('T')[0];
-            }
-            
-            // 시트에서 "2026-04-15" 문자열로 바로 올 경우를 포함하여 비교
-            return logDate === todayStr;
+            // 시트에서 넘어온 데이터가 Date 객체나 ISO 문자열일 경우 가공
+            const d = new Date(logDate);
+            const lYear = d.getFullYear();
+            const lMonth = String(d.getMonth() + 1).padStart(2, '0');
+            const lDay = String(d.getDate()).padStart(2, '0');
+            const formattedLogDate = `${lYear}-${lMonth}-${lDay}`;
+
+            // 시차 때문에 날짜가 하루 전으로 보일 경우를 대비해 문자열 포함 여부도 체크
+            return formattedLogDate === todayStr || String(logDate).includes(todayStr);
         });
 
         if (todayLogs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3">오늘(' + todayStr + ') 점검 내역이 없습니다.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="3">오늘(${todayStr}) 점검 내역이 없습니다.</td></tr>`;
             return;
         }
 
@@ -144,7 +150,9 @@ async function loadHistory() {
             let d = log.date;
             let t = log.time;
             
+            // 출력 시에도 깔끔하게 날짜만 표시
             if (String(d).includes('T')) d = d.split('T')[0];
+            // 시간 표시 (HH:mm:ss)
             if (String(t).includes('T')) t = new Date(t).toTimeString().split(' ')[0];
             
             return `
@@ -157,7 +165,7 @@ async function loadHistory() {
         }).join('');
         
     } catch (e) {
-        console.error(e);
+        console.error("데이터 로드 중 오류:", e);
         document.getElementById('history-body').innerHTML = '<tr><td colspan="3">데이터 로드 오류</td></tr>';
     }
 }
